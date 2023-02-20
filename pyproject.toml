@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "map-signal"
+version = "0.1.0"
+description = ""
+authors = ["Loonan Chauvette <loonan.chauvette@gmail.com>"]
+readme = "README.md"
+packages = [{include = "map_signal"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
