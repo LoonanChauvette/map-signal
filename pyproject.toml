@@ -1,14 +1,30 @@
 [tool.poetry]
 name = "map-signal"
-version = "0.1.0"
+version = "0.0.1"
 description = ""
+license = "MIT"
 authors = ["Loonan Chauvette <loonan.chauvette@gmail.com>"]
 readme = "README.md"
+repository = "https://github.com/LoonanChauvette/map-signal"
+keywords = ["synthesizer", "DSP", "audio"]
+classifiers = [
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Sound/Audio :: Sound Synthesis",
+    "Development Status :: 1 - Planning",
+    "Intended Audience :: Science/Research",
+    "Natural Language :: English"
+]
 packages = [{include = "map_signal"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^6.0.0"
+pytest-mock = "*"
+
+[tool.poetry.group.docs.dependencies]
+mkdocs = "*"
 
 [build-system]
 requires = ["poetry-core"]
