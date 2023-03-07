@@ -51,7 +51,6 @@ def objective_function(coefficients, desired_ratio):
 
 def modify_coefficients(coefficients, desired_ratio):
     result = minimize(objective_function, coefficients, args=(desired_ratio,))
-    normalized_coefs = result.x / np.max(np.abs(result.x))
     return result.x
     
 if __name__ == "__main__":
@@ -60,7 +59,7 @@ if __name__ == "__main__":
 
     array = np.array([200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000])
     coefs = discrete_normal_distribution(array, 1000, 300)
-    m_coef = modify_coefficients(coefs,1.5)
+    m_coef = modify_coefficients(coefs, 1.5)
     waveform = generate_waveform(array, m_coef, sample_rate=sample_rate, duration=duration)
     wavfile.write("output_odd.wav", sample_rate, waveform)
 
