@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.stats as stats
@@ -7,15 +9,59 @@ from scipy.optimize import minimize
 
 class Signal:
     def __init__(self, duration=5, sample_rate=44100):
-        
-        self.duration    = float(duration)
-        self.sample_rate = int(sample_rate)
-        self.num_samples = int(self.duration * self.sample_rate)
-        self.time_array  = self.get_discrete_times()
+        self._duration    = self._validate_return_duration(duration)
+        self._sample_rate = self._validate_return_sample_rate(sample_rate)
+        self._num_samples = self._compute_num_samples()
+        self._time_array  = self._compute_time_array()
     
-    def get_discrete_times(self):
-        arr = np.arange(0, self.num_samples) / self.sample_rate
-        return arr.reshape(1,self.num_samples)
+    @property
+    def duration(self):
+        return self._duration
+    
+    @duration.setter
+    def duration(self, value):
+        if not isinstance(value, (int, float)) or value <= 0:
+            raise ValueError("duration must be a positive number")
+        self._duration    = self._validate_return_duration(value)
+        self._num_samples = self._compute_num_samples()
+        self._time_array  = self._compute_time_array()
+    
+    @property
+    def sample_rate(self): 
+        return self._sample_rate
+    
+    @sample_rate.setter
+    def sample_rate(self, value):
+        self._sample_rate = self._validate_return_sample_rate(value)
+        self._num_samples = self._compute_num_samples()
+        self._time_array  = self._compute_time_array()
+
+    @property
+    def num_samples(self):
+        return self._num_samples
+    
+    @property
+    def time_array(self):
+        return self._time_array
+
+    def _compute_num_samples(self):
+        return int(self._duration * self._sample_rate)
+    
+    def _compute_time_array(self):
+        arr = np.arange(0, self._num_samples) / self._sample_rate
+        return arr.reshape(1, self._num_samples)
+    
+    def _validate_return_duration(self, duration):
+        if not isinstance(duration, (int, float)) or duration <= 0:
+            raise ValueError("duration must be a positive number")
+        return float(duration)
+    
+    def _validate_return_sample_rate(self, sample_rate):
+        if not isinstance(sample_rate, (int, float)) or sample_rate <= 0:
+            raise ValueError("sample_rate must be a positive number")
+        if sample_rate not in [44100, 48000]: 
+            warnings.warn("Non standard sample rate")
+        return float(sample_rate)
 
 class Sinusoid(Signal):
     def __init__(self, frequency=440, amplitude=1.0, phase=0, 
@@ -68,7 +114,12 @@ class HarmonicComplex(Signal):
 
 if __name__ == "__main__":
     h = HarmonicComplex()
-    print(h.samples)
+    print(h.duration)
+    print(h.num_samples)
+    h.duration = 1
+    print(h.duration)
+    print(h.num_samples)
+    
 
 
 
