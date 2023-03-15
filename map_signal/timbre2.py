@@ -13,7 +13,7 @@ class Signal:
 
         # Input validation
         if self._is_positive_number(duration, "duration") > 30:
-            warnings.warn("Longer durations may be inefficient and cause errors, proceed with caution")
+            warnings.warn("Longer durations (>30 sec) may be inefficient, proceed with caution")
         if self._is_positive_number(sample_rate, "sample_rate") not in [44100, 48000]: 
             warnings.warn("Non standard sample rate")
 
@@ -45,8 +45,11 @@ class Signal:
             raise ValueError(f"{name} must be a positive number")
         return value
 
+    def to_int(self, arr):
+        return np.int16((arr/np.max(np.abs(arr))) * 32767)
 
-class Sinusoid(Signal):
+
+class Periodic(Signal):
     def __init__(self, frequency=440, amplitude=1.0, phase=0, **kwargs):
         super().__init__(**kwargs)
         self._frequency = np.float32(self._is_positive_number(frequency, "frequency"))
@@ -70,13 +73,9 @@ class Sinusoid(Signal):
     def period(self):
         return 1 / self._frequency
     
-    @cached_property
-    def samples(self):
-        return np.sin(2 * np.pi * self.frequency * self.time_array + self.phase) * self.amplitude
-    
-    def to_int(self, arr):
-        m = np.max(np.abs(arr))
-        return np.int16((arr / m) * 32767)
+    @property
+    def sinusoid(self):
+        return np.sin(2 * np.pi * self.frequency * self.time_array + self.phase)
     
     def plot_period(self, n_period=3):
         periods = int(self.sample_rate / self.frequency) * n_period
@@ -88,7 +87,49 @@ class Sinusoid(Signal):
         plt.title(f'{self.frequency} Hz Periodic Tone Over {n_period} Periods')
         plt.show()
 
-class HarmonicComplex(Sinusoid):
+class Sinusoidal(Periodic):
+    @cached_property
+    def samples(self):
+        return self.amplitude * super().sinusoid
+
+class Square(Periodic):
+    @cached_property
+    def samples(self):
+        return self.amplitude * np.sign(super().sinusoid)
+
+class Triangle(Periodic):
+    @cached_property
+    def samples(self):
+        return ((2 * self.amplitude) / np.pi) * np.arcsin(super().sinusoid)
+    
+class Sawtooth(Periodic):
+    @cached_property
+    def samples(self):
+        return self.amplitude * np.arctan(np.tan(np.pi * self.frequency * self.time_array + self.phase))
+
+class ReverseSawtooth(Sawtooth):
+    @cached_property
+    def samples(self):
+        return 1 - super().samples
+    
+class PulseTrain(Periodic):
+    def __init__(self, duty_cycle = 0.4, **kwargs):
+        super().__init__(**kwargs)
+        self._duty_cycle = duty_cycle * (np.pi)
+
+    @property
+    def duty_cycle(self):
+        return self._duty_cycle
+
+    @cached_property
+    def samples(self):
+        sawtooth = np.arctan(np.tan(np.pi * self.frequency * self.time_array))
+        delayed = np.arctan(np.tan(np.pi * self.frequency * self.time_array + self._duty_cycle))
+        difference = sawtooth - delayed
+        return self.amplitude * (difference / max(abs(difference)))
+    
+
+class HarmonicComplex(Periodic):
     def __init__(self, num_harmonics=4, coef = "uniform", h_phase=0, **kwargs):
         super().__init__(**kwargs)
         self._n_harm          = np.int16(self._is_positive_number(num_harmonics, "number of harmonics"))
@@ -125,5 +166,5 @@ class HarmonicComplex(Sinusoid):
 
 
 if __name__ == "__main__":
-    h = HarmonicComplex(h_phase="random")
+    h = PulseTrain()
     h.plot_period()
