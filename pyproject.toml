@@ -27,10 +27,12 @@ jupyter = "^1.0"
 [tool.poetry.group.dev.dependencies]
 pytest = "^6.0.0"
 pytest-mock = "*"
+tox = "^3.20.1"
 
 [tool.poetry.group.docs.dependencies]
 mkdocs = "*"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+

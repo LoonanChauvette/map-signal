@@ -34,7 +34,7 @@ class Signal:
     def num_samples(self):
         """Total number of discrete time samples in the signal."""
         return int(self._duration * self._sample_rate)
-    
+
     @cached_property
     def time_array(self):
         """Array of all the discrete time samples of the signal."""
@@ -72,7 +72,7 @@ class Periodic(Signal):
     @property
     def period(self):
         return 1 / self._frequency
-    
+
     @property
     def sinusoid(self):
         return np.sin(2 * np.pi * self.frequency * self.time_array + self.phase)
@@ -113,9 +113,11 @@ class ReverseSawtooth(Sawtooth):
         return 1 - super().samples
     
 class PulseTrain(Periodic):
-    def __init__(self, duty_cycle = 0.4, **kwargs):
+    def __init__(self, duty_cycle = 0.5, **kwargs):
         super().__init__(**kwargs)
-        self._duty_cycle = duty_cycle * (np.pi)
+        if duty_cycle < 0 or duty_cycle > 1:
+            raise ValueError("Duty cycle must be between 0 and 1")
+        self._duty_cycle = duty_cycle * np.pi
 
     @property
     def duty_cycle(self):
