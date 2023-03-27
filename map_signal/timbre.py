@@ -1,70 +1,140 @@
+import warnings
+
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.stats as stats
 
 from scipy.io import wavfile
 from scipy.optimize import minimize
+from functools import cached_property
 
-def discrete_normal_distribution(array, mean, std_dev):
-    probabilities = [stats.norm(mean, std_dev).pdf(num) for num in array]
-    probabilities = [p/sum(probabilities) for p in probabilities] 
-    return probabilities
+class Signal:
+    def __init__(self, duration=5, sample_rate=44100):
+        self.duration    = np.float32(duration)
+        self.sample_rate = np.float32(sample_rate)    
+        self.num_sample  = int(self.duration * self.sample_rate)
+        self.time_array  = self.compute_time_array()
 
-def discrete_chisquared_distribution(array, df = 4):
-    array = array / np.min(array)
-    probabilities = [stats.chi2(df).pdf(num) for num in array]
-    probabilities = [p/sum(probabilities) for p in probabilities] 
-    return probabilities
+    def compute_time_array(self):
+        """Array of all the discrete time samples of the signal."""
+        return np.linspace(0, self.duration, self.num_sample).reshape((1, self.num_sample))
 
-def discrete_exponential_distribution(array, lambd = 0.5):
-    array = array / np.min(array)
-    probabilities = [stats.expon(scale=1/lambd).pdf(num) for num in array]
-    probabilities = [p/sum(probabilities) for p in probabilities] 
-    return probabilities
+    def to_int(self, arr):
+        return np.int16((arr/np.max(np.abs(arr))) * 32767)
 
-def generate_waveform(harmonics, fourier_coeffs, sample_rate=44100, duration=5):
+class Periodic(Signal):
+    def __init__(self, frequency=440, amplitude=1.0, phase=0, **kwargs):
+        super().__init__(**kwargs)
+        self.frequency = frequency
+        self.amplitude = amplitude
+        self.phase     = phase
+        self.period    = 1 / self.frequency
 
-    length = int(sample_rate * duration)
-    discrete_times = np.linspace(0, duration, length, endpoint=False)
-    waveform = np.zeros(length)
+    @property
+    def sinusoid(self):
+        return np.sin(2 * np.pi * self.frequency * self.time_array + self.phase)
     
-    for freq, coeff in zip(harmonics, fourier_coeffs):
-        waveform += (np.sin(2 * np.pi * freq * discrete_times) * coeff)
+    def plot_period(self, n_period=3):
+        periods = int(self.sample_rate / self.frequency) * n_period
+        x = self.time_array[0][:periods]
+        y = self.samples[0][:periods]
+        plt.plot(x, y)
+        plt.xlabel('Time (s)')
+        plt.ylabel('Amplitude')
+        plt.title(f'{self.frequency} Hz Periodic Tone Over {n_period} Periods')
+        plt.show()
+
+class SineWave(Periodic):
+    @cached_property
+    def samples(self):
+        return self.amplitude * super().sinusoid
+
+class SquareWave(Periodic):
+    @cached_property
+    def samples(self):
+        return self.amplitude * np.sign(super().sinusoid)
+
+class TriangleWave(Periodic):
+    @cached_property
+    def samples(self):
+        return ((2 * self.amplitude) / np.pi) * np.arcsin(super().sinusoid)
     
-    # Normalize the waveform between -1 and 1
-    waveform /= np.max(np.abs(waveform))
+class SawtoothWave(Periodic):
+    @cached_property
+    def samples(self):
+        return self.amplitude * np.arctan(np.tan(np.pi * self.frequency * self.time_array + self.phase))
+
+class ReverseSawtoothWave(SawtoothWave):
+    @cached_property
+    def samples(self):
+        return 1 - super().samples
     
-    # Convert the waveform to a 16-bit integer format
-    waveform_int = np.int16(waveform * 32767)
+class PulseTrain(Periodic):
+    def __init__(self, duty_cycle = 0.5, **kwargs):
+        super().__init__(**kwargs)
+        if duty_cycle < 0 or duty_cycle > 1:
+            raise ValueError("Duty cycle must be between 0 and 1")
+        self.duty_cycle = duty_cycle * np.pi
 
-    return waveform_int
-
-def odd_even_ratio(coefficients):
-    # Odds and evens are reversed with respect to the modulus, since python index starts at 0
-    odd_sum = sum(coeff for i, coeff in enumerate(coefficients) if i % 2 == 0)
-    even_sum = sum(coeff for i, coeff in enumerate(coefficients) if i % 2 != 0)
-    ratio = odd_sum / even_sum if even_sum != 0 else float('inf')
-    return ratio
-
-def objective_function(coefficients, desired_ratio):
-    return abs(odd_even_ratio(coefficients) - desired_ratio)
-
-def modify_coefficients(coefficients, desired_ratio):
-    result = minimize(objective_function, coefficients, args=(desired_ratio,))
-    return result.x
+    @cached_property
+    def samples(self):
+        sawtooth = np.arctan(np.tan(np.pi * self.frequency * self.time_array))
+        delayed = np.arctan(np.tan(np.pi * self.frequency * self.time_array + self.duty_cycle))
+        difference = sawtooth - delayed
+        return self.amplitude * (difference / max(abs(difference)))
     
+
+class HarmonicComplex(Periodic):
+    """"
+    centroid_shift multiplies the centroid by a value (1 is same, 0.5 is half, 2 is twice, etc.)
+    """
+    def __init__(self, num_harmonics=4, centroid_shift = 1, distribution = "uniform", h_phase=0, **kwargs):
+        super().__init__(**kwargs)
+        self._n_harm          = np.int16(self._is_positive_number(num_harmonics, "number of harmonics"))
+        self._centroid_shift  = centroid_shift
+        self._harmonics_coef  = self._compute_harmonics_coef(distribution)
+        self._harmonics_phase = self._compute_harmonics_phase(h_phase)
+
+    @property
+    def harmonics(self):
+        return np.arange(1, self._n_harm + 1, dtype=np.float32) * self.frequency
+    
+    @cached_property
+    def harmonics_array(self):
+        h = self.harmonics.reshape(self._n_harm, 1)
+        return np.sin(2 * np.pi * h * (self.time_array + self._harmonics_phase) + self.phase) * self._harmonics_coef
+
+    @cached_property
+    def samples(self):
+        return np.sum(self.harmonics_array, axis=0).reshape((1, self.num_samples))     
+    
+    def _compute_harmonics_coef(self, distribution, ):
+        if distribution not in ("uniform", "normal"):
+            raise ValueError("coef must be 'uniform'(other not implemented yet)")
+        
+        elif distribution == "uniform":
+            return np.ones((self._n_harm, 1)) / self._n_harm
+        
+        elif distribution == "normal":
+            mean = np.mean(self.harmonics) * self._centroid_shift
+            print(mean)
+            sd = np.std(self.harmonics)
+            prob = stats.norm(mean, sd).pdf(self.harmonics)
+            prob /= np.sum(prob)
+            return np.array(prob).reshape((self._n_harm, 1))
+
+    def _compute_harmonics_phase(self, h_phase):
+        if isinstance(h_phase, (int, float)): 
+            return np.full((self._n_harm, 1), h_phase, dtype=np.float32)
+        elif h_phase == "zero":
+            return np.zeros((self._n_harm, 1))
+        elif h_phase == "random":
+            return np.random.uniform(0, 2*np.pi, (self._n_harm, 1))
+    
+
+
 if __name__ == "__main__":
-    sample_rate = 44100
-    duration = 5
+    h = HarmonicComplex(distribution = "normal", centroid_shift=0.5)
+    h.plot_period()
 
-    array = np.array([200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000])
-    coefs = discrete_normal_distribution(array, 1000, 300)
-    m_coef = modify_coefficients(coefs, 1.5)
-    waveform = generate_waveform(array, m_coef, sample_rate=sample_rate, duration=duration)
-    wavfile.write("output_odd.wav", sample_rate, waveform)
-
-    plt.bar(array, m_coef, width=50)
-    plt.xlabel("Array")
-    plt.ylabel("M Coefficient")
-    plt.show()
 
