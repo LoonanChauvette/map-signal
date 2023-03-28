@@ -34,8 +34,8 @@ class Periodic(Signal):
     
     def plot_period(self, n_period=3):
         periods = int(self.sample_rate / self.frequency) * n_period
-        x = self.time_array[0][:periods]
-        y = self.samples[0][:periods]
+        x = self.time_array.flatten()[:periods]
+        y = self.samples.flatten()[:periods]
         plt.plot(x, y)
         plt.xlabel('Time (s)')
         plt.ylabel('Amplitude')
@@ -92,8 +92,13 @@ class HarmonicComplex(Periodic):
         self.harm_matrix = self.compute_harmonics_matrix() # shape (n_harm, num_sample)
         self.samples     = self.compute_samples()  # shape (1, num_sample)
 
+    def update(self):
+        self.harm_matrix = self.compute_harmonics_matrix()
+        self.samples     = self.compute_samples()
+
     def uniform_coef(self):
         self.harm_coef = np.ones((self.n_harm, 1)) / self.n_harm 
+        self.update()
     
     def normal_coef(self, mean_harmonic=None, sd_scaling=1):
         mean = np.median(self.harm_index) if mean_harmonic is None else mean_harmonic
@@ -101,14 +106,15 @@ class HarmonicComplex(Periodic):
         coef = stats.norm(mean, sd).pdf(self.harm_index)
         coef /= sum(coef)
         self.harm_coef = coef.reshape((self.n_harm, 1))
-    
-    def compute_harmonics_frequencies(self):
-        harmonic_frequencies = self.harm_index * self.frequency
-        return harmonic_frequencies.reshape((self.n_harm, 1))
+        self.update()
 
-    def compute_samples(self):
-        return np.sum(self.harm_matrix, axis=0).reshape((1, self.num_sample))     
-
+    def plot_coef(self):
+        plt.bar(self.harm_freqs.flatten(), self.harm_coef.flatten(), width=0.8*self.frequency)
+        plt.xlabel('Frequency (Hz)')
+        plt.ylabel('Harmonic Coefficient')
+        plt.title(f"{self.frequency} Hz Harmonic Complex")
+        plt.show()
+ 
     def compute_harmonics_phase(self, h_phase):
         if isinstance(h_phase, (int, float)): 
             return np.full((self.n_harm, 1), h_phase, dtype=np.float32)
@@ -117,14 +123,22 @@ class HarmonicComplex(Periodic):
         elif h_phase == "random":
             return np.random.uniform(0, 2*np.pi, (self.n_harm, 1))
     
+    def compute_harmonics_frequencies(self):
+        harmonic_frequencies = self.harm_index * self.frequency
+        return harmonic_frequencies.reshape((self.n_harm, 1))
+    
     def compute_harmonics_matrix(self):
         time_phase_matrix = self.harm_phase + self.time_array 
         return np.sin(2*np.pi * self.harm_freqs * time_phase_matrix + self.phase) * self.harm_coef
 
+    def compute_samples(self):
+        return np.sum(self.harm_matrix, axis=0).reshape((1, self.num_sample))     
+
+
 
 if __name__ == "__main__":
     h = HarmonicComplex()
-    print(h.harm_freqs)
+    h.normal_coef()
     h.plot_period()
 
 
