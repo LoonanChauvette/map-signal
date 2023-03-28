@@ -1,5 +1,3 @@
-import warnings
-
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.stats as stats
@@ -82,59 +80,51 @@ class PulseTrain(Periodic):
         delayed = np.arctan(np.tan(np.pi * self.frequency * self.time_array + self.duty_cycle))
         difference = sawtooth - delayed
         return self.amplitude * (difference / max(abs(difference)))
-    
 
 class HarmonicComplex(Periodic):
-    """"
-    centroid_shift multiplies the centroid by a value (1 is same, 0.5 is half, 2 is twice, etc.)
-    """
-    def __init__(self, num_harmonics=4, centroid_shift = 1, distribution = "uniform", h_phase=0, **kwargs):
+    def __init__(self, n_harmonics=4, h_phase=0, **kwargs):
         super().__init__(**kwargs)
-        self._n_harm          = np.int16(self._is_positive_number(num_harmonics, "number of harmonics"))
-        self._centroid_shift  = centroid_shift
-        self._harmonics_coef  = self._compute_harmonics_coef(distribution)
-        self._harmonics_phase = self._compute_harmonics_phase(h_phase)
+        self.n_harm      = n_harmonics 
+        self.harm_index  = np.arange(1, self.n_harm + 1)  # ex. [1, 2, 3, ..., n_harm]
+        self.harm_coef   = np.ones((self.n_harm, 1)) / self.n_harm # shape (n_harm, 1)
+        self.harm_phase  = self.compute_harmonics_phase(h_phase)   # shape (n_harm, 1)
+        self.harm_freqs  = self.compute_harmonics_frequencies()    # shape (n_harm, 1)
+        self.harm_matrix = self.compute_harmonics_matrix() # shape (n_harm, num_sample)
+        self.samples     = self.compute_samples()  # shape (1, num_sample)
 
-    @property
-    def harmonics(self):
-        return np.arange(1, self._n_harm + 1, dtype=np.float32) * self.frequency
+    def uniform_coef(self):
+        self.harm_coef = np.ones((self.n_harm, 1)) / self.n_harm 
     
-    @cached_property
-    def harmonics_array(self):
-        h = self.harmonics.reshape(self._n_harm, 1)
-        return np.sin(2 * np.pi * h * (self.time_array + self._harmonics_phase) + self.phase) * self._harmonics_coef
-
-    @cached_property
-    def samples(self):
-        return np.sum(self.harmonics_array, axis=0).reshape((1, self.num_samples))     
+    def normal_coef(self, mean_harmonic=None, sd_scaling=1):
+        mean = np.median(self.harm_index) if mean_harmonic is None else mean_harmonic
+        sd   = np.std(self.harm_index) * sd_scaling
+        coef = stats.norm(mean, sd).pdf(self.harm_index)
+        coef /= sum(coef)
+        self.harm_coef = coef.reshape((self.n_harm, 1))
     
-    def _compute_harmonics_coef(self, distribution, ):
-        if distribution not in ("uniform", "normal"):
-            raise ValueError("coef must be 'uniform'(other not implemented yet)")
-        
-        elif distribution == "uniform":
-            return np.ones((self._n_harm, 1)) / self._n_harm
-        
-        elif distribution == "normal":
-            mean = np.mean(self.harmonics) * self._centroid_shift
-            print(mean)
-            sd = np.std(self.harmonics)
-            prob = stats.norm(mean, sd).pdf(self.harmonics)
-            prob /= np.sum(prob)
-            return np.array(prob).reshape((self._n_harm, 1))
+    def compute_harmonics_frequencies(self):
+        harmonic_frequencies = self.harm_index * self.frequency
+        return harmonic_frequencies.reshape((self.n_harm, 1))
 
-    def _compute_harmonics_phase(self, h_phase):
+    def compute_samples(self):
+        return np.sum(self.harm_matrix, axis=0).reshape((1, self.num_sample))     
+
+    def compute_harmonics_phase(self, h_phase):
         if isinstance(h_phase, (int, float)): 
-            return np.full((self._n_harm, 1), h_phase, dtype=np.float32)
+            return np.full((self.n_harm, 1), h_phase, dtype=np.float32)
         elif h_phase == "zero":
-            return np.zeros((self._n_harm, 1))
+            return np.zeros((self.n_harm, 1))
         elif h_phase == "random":
-            return np.random.uniform(0, 2*np.pi, (self._n_harm, 1))
+            return np.random.uniform(0, 2*np.pi, (self.n_harm, 1))
     
+    def compute_harmonics_matrix(self):
+        time_phase_matrix = self.harm_phase + self.time_array 
+        return np.sin(2*np.pi * self.harm_freqs * time_phase_matrix + self.phase) * self.harm_coef
 
 
 if __name__ == "__main__":
-    h = HarmonicComplex(distribution = "normal", centroid_shift=0.5)
+    h = HarmonicComplex()
+    print(h.harm_freqs)
     h.plot_period()
 
 
